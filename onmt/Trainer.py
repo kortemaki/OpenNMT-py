@@ -211,7 +211,7 @@ class Trainer(object):
             self.valid_loss.cur_dataset = cur_dataset
 
             src = onmt.io.make_features(batch, 'src', self.data_type)
-            if self.data_type == 'text':
+            if self.data_type == 'text' or self.data_type == 'hierarchicalText':
                 _, src_lengths = batch.src
             else:
                 src_lengths = None
@@ -284,7 +284,7 @@ class Trainer(object):
 
             dec_state = None
             src = onmt.io.make_features(batch, 'src', self.data_type)
-            if self.data_type == 'text':
+            if self.data_type == 'text' or self.data_type == 'hierarchicalText':
                 _, src_lengths = batch.src
                 report_stats.n_src_words += src_lengths.sum()
             else:

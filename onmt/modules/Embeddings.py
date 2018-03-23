@@ -204,5 +204,5 @@ class IdentityEmbeddings(nn.Module):
         
     def forward(self, input):
         out_length, out_batch, emb_size = input.size()
-        aeq(nfeat, self.embedding_size)
+        aeq(emb_size, self.embedding_size)
         return input

@@ -232,10 +232,10 @@ class HierarchicalTextDataset(ONMTDatasetBase):
         #TODO: do we need BOS, EOS tokens here?
         #TODO: What will happen now that lengths are not included??
         src_inner = torchtext.data.Field(init_token=BOS_WORD, eos_token=EOS_WORD,
-                                         pad_token=PAD_WORD)
+                                         pad_token=PAD_WORD, include_lengths=True)
 
         #TODO: fix_length should not be hardcoded here
-        fields["src"] = torchtext.data.NestedField(src_inner, fix_length=50)
+        fields["src"] = torchtext.data.NestedField(src_inner, fix_length=50, include_lengths=True)
 
         #TODO: I don't think these will work
         for j in range(n_src_features):
