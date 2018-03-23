@@ -203,6 +203,7 @@ class HierarchicalEncoder(EncoderBase):
         super(HierarchicalEncoder, self).__init__()
         self.encoder_inf = encoder_inf
         self.encoder_sup = encoder_sup
+        self.no_pack_padded_seq = True
 
     def _check_args(self, input, lengths=None, hidden=None):
         s_len, i_len, n_batch, n_feats = input.size()
@@ -211,7 +212,7 @@ class HierarchicalEncoder(EncoderBase):
             aeq(n_batch, n_batch_)
             aeq(s_len_plus_1, s_len+1)
             
-    def forward(self, src, lengths):
+    def forward(self, src, lengths=None):
         """
         Args:
             src (:obj:`LongTensor`):
@@ -225,19 +226,51 @@ class HierarchicalEncoder(EncoderBase):
             (tuple of :obj:`FloatTensor`, :obj:`FloatTensor`):
                 * final encoder state, used to initialize decoder
                 * memory bank for attention, `[src_len x batch x hidden]`
-        """
-        pdb.set_trace()
-
-        src_len_sup = src.size()[0]
+        """        
+        
+        src_len_sup = lengths[0] if lengths is not None else src.size()[0]
         enc_s = None
-        for i in xrange(src_len_sup):
+        for i in xrange(max(src_len_sup)):
             #TODO: debug
-            enc_si, memory_bank = self.encoder_inf(src[i].transpose(0,1,2), lengths[1+i].flatten())
+            if lengths is not None:
+                l = lengths[1+i]
+                #due to a cudnn restriction, we need to sort the lengths:
+                l, index = l.sort(0,descending=True)
+                l = l.contiguous()
+                inputs = src[i][:,index].unsqueeze(-1)
+            else:
+                l = None
+                inputs = src[i].unsqueeze(-1)
+                
+            enc_si, memory_bank = self.encoder_inf(inputs, lengths=l)
+
+            _, index = index.sort(0,descending=False)
+            #TODO: what is the tuple?
+            enc_si = enc_si[0][-1,:,:][index,:].unsqueeze(0) #keep the singleton dimension
+            
             if(enc_s is None):
                 enc_s = enc_si
             else:
-                enc_s = torch.cat((enc_s,enc_si),0)
-        return self.encoder_sup(enc_s, lengths[0].flatten())
+                try:
+                    enc_s = torch.cat((enc_s,enc_si),0)
+                except:
+                    pdb.set_trace()
+
+        if lengths is not None:
+            l = lengths[0]
+            l,index = l.sort(0,descending=True)
+            l = l.contiguous()
+            inputs = enc_s[:,index,:]
+        else:
+            l = None
+            inputs = enc_s
+
+        enc_out, memory_bank = self.encoder_sup(inputs, lengths=l)
+        _,index = index.sort(0,descending=False)
+        
+        return ((enc_out[0][:,index,:],
+                 enc_out[1][:,index,:]),
+                memory_bank[:,index,:])
 
     
 class RNNDecoderBase(nn.Module):
@@ -633,14 +666,19 @@ class NMTModel(nn.Module):
         """
         tgt = tgt[:-1]  # exclude last target from inputs
 
+        # reverse dimensions
+        src = src.permute(*range(len(src.size()))[::-1])
+        lengths = lengths.permute(*range(len(lengths.size()))[::-1])
+        
         enc_final, memory_bank = self.encoder(src, lengths)
         enc_state = \
             self.decoder.init_decoder_state(src, memory_bank, enc_final)
+
         decoder_outputs, dec_state, attns = \
             self.decoder(tgt, memory_bank,
                          enc_state if dec_state is None
                          else dec_state,
-                         memory_lengths=lengths)
+                         memory_lengths=lengths[0,:])
         if self.multigpu:
             # Not yet supported on multi-gpu
             dec_state = None
