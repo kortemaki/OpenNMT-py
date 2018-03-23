@@ -42,7 +42,7 @@ class PositionalEncoding(nn.Module):
         emb = self.dropout(emb)
         return emb
 
-    
+
 class Embeddings(nn.Module):
     """
     Words embeddings for encoder/decoder.
@@ -139,7 +139,7 @@ class Embeddings(nn.Module):
         self.make_embedding = nn.Sequential()
         self.make_embedding.add_module('emb_luts', emb_luts)
 
-        if feat_merge == 'mlp':
+        if feat_merge == 'mlp' and len(feat_vocab_sizes) > 0:
             in_dim = sum(emb_dims)
             out_dim = word_vec_size
             mlp = nn.Sequential(nn.Linear(in_dim, out_dim), nn.ReLU())

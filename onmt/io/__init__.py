@@ -5,6 +5,7 @@ from onmt.io.IO import collect_feature_vocabs, make_features, \
                        build_vocab, merge_vocabs, OrderedIterator
 from onmt.io.DatasetBase import ONMTDatasetBase, PAD_WORD, BOS_WORD, \
                                 EOS_WORD, UNK
+
 from onmt.io.HierarchicalTextDataset import HierarchicalTextDataset, \
                                             ShardedHierarchicalTextCorpusIterator
 from onmt.io.TextDataset import TextDataset, ShardedTextCorpusIterator

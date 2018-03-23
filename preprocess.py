@@ -108,7 +108,6 @@ def build_save_text_dataset_in_shards(src_corpus, tgt_corpus, fields,
         torch.save(dataset, pt_file)
 
         ret_list.append(pt_file)
-        #pdb.set_trace()
     return ret_list
 
 
@@ -188,15 +187,13 @@ def main():
 
     print("Building & saving training data...")
     train_dataset_files = build_save_dataset('train', fields, opt)
-        
+
     print("Building & saving vocabulary...")
     build_save_vocab(train_dataset_files, fields, opt)
 
     print("Building & saving validation data...")
     build_save_dataset('valid', fields, opt)
 
-    pdb.set_trace()
-    
 
 if __name__ == "__main__":
     main()

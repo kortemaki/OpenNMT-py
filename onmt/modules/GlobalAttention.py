@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 
 from onmt.Utils import aeq, sequence_mask
-import pdb
 
 class GlobalAttention(nn.Module):
     """
@@ -168,7 +167,6 @@ class GlobalAttention(nn.Module):
         align = self.score(input, memory_bank)
 
         if memory_lengths is not None:
-            
             mask = sequence_mask(memory_lengths)
             mask = mask.unsqueeze(1)  # Make it broadcastable.
             align.data.masked_fill_(1 - mask, -float('inf'))

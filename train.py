@@ -7,6 +7,7 @@ import glob
 import os
 import sys
 import random
+from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -20,6 +21,7 @@ import onmt.ModelConstructor
 import onmt.modules
 from onmt.Utils import use_gpu
 import opts
+
 
 import pdb
 
@@ -76,10 +78,15 @@ if opt.exp_host != "":
 
 if opt.tensorboard:
     from tensorboardX import SummaryWriter
-    writer = SummaryWriter(opt.tensorboard_log_dir, comment="Onmt")
+    writer = SummaryWriter(
+        opt.tensorboard_log_dir + datetime.now().strftime("/%b-%d_%H-%M-%S"),
+        comment="Onmt")
+
+progress_step = 0
 
 
 def report_func(epoch, batch, num_batches,
+                progress_step,
                 start_time, lr, report_stats):
     """
     This is the user-defined batch-level traing progress
@@ -89,6 +96,7 @@ def report_func(epoch, batch, num_batches,
         epoch(int): current epoch count.
         batch(int): current batch count.
         num_batches(int): total number of batches.
+        progress_step(int): the progress step.
         start_time(float): last report time.
         lr(float): current learning rate.
         report_stats(Statistics): old Statistics instance.
@@ -102,7 +110,7 @@ def report_func(epoch, batch, num_batches,
         if opt.tensorboard:
             # Log the progress using the number of batches on the x-axis.
             report_stats.log_tensorboard(
-                "progress", writer, lr, epoch * num_batches + batch)
+                "progress", writer, lr, progress_step)
         report_stats = onmt.Statistics()
 
     return report_stats
@@ -233,7 +241,6 @@ def train_model(model, fields, optim, data_type, model_opt):
     trainer = onmt.Trainer(model, train_loss, valid_loss, optim,
                            trunc_size, shard_size, data_type,
                            norm_method, grad_accum_count)
-    
     print('\nStart training...')
     print(' * number of epochs: %d, starting from Epoch %d' %
           (opt.epochs + 1 - opt.start_epoch, opt.start_epoch))
@@ -241,7 +248,6 @@ def train_model(model, fields, optim, data_type, model_opt):
 
     for epoch in range(opt.start_epoch, opt.epochs + 1):
         print('')
-        
         # 1. Train for one epoch on the training set.
         train_iter = make_dataset_iter(lazily_load_dataset("train"),
                                        fields, opt)
@@ -412,7 +418,8 @@ def main():
     # (All datasets have the same data_type).
     first_dataset = next(lazily_load_dataset("train"))
     data_type = first_dataset.data_type
-    
+
+
     # Load fields generated from preprocess phase.
     fields = load_fields(first_dataset, data_type, checkpoint)
 

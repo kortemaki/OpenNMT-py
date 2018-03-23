@@ -10,7 +10,6 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 import onmt
 from onmt.Utils import aeq
 
-import pdb
 
 def rnn_factory(rnn_type, **kwargs):
     # Use pytorch version when available.
@@ -273,6 +272,7 @@ class HierarchicalEncoder(EncoderBase):
                 memory_bank[:,index,:])
 
     
+
 class RNNDecoderBase(nn.Module):
     """
     Base recurrent attention-based decoder class.
@@ -667,6 +667,7 @@ class NMTModel(nn.Module):
         tgt = tgt[:-1]  # exclude last target from inputs
 
         # reverse dimensions
+        #TODO: Where should this properly be done?
         src = src.permute(*range(len(src.size()))[::-1])
         lengths = lengths.permute(*range(len(lengths.size()))[::-1])
         
@@ -674,6 +675,7 @@ class NMTModel(nn.Module):
         enc_state = \
             self.decoder.init_decoder_state(src, memory_bank, enc_final)
 
+        #TODO: can the decoder know that it only needs the first batch of lengths?
         decoder_outputs, dec_state, attns = \
             self.decoder(tgt, memory_bank,
                          enc_state if dec_state is None

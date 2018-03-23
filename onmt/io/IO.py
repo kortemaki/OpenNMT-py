@@ -13,7 +13,6 @@ from onmt.io.TextDataset import TextDataset
 from onmt.io.ImageDataset import ImageDataset
 from onmt.io.AudioDataset import AudioDataset
 
-import pdb
 
 def _getstate(self):
     return dict(self.__dict__, stoi=dict(self.stoi))
@@ -253,8 +252,8 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
     counter = {}
     for k in fields:
         counter[k] = Counter()
-        
-    for path in train_dataset_files:     
+
+    for path in train_dataset_files:
         dataset = torch.load(path)
         print(" * reloading %s." % path)
         for ex in dataset.examples:

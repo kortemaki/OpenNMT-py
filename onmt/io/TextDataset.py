@@ -13,6 +13,7 @@ from onmt.Utils import aeq
 from onmt.io.DatasetBase import (ONMTDatasetBase, UNK_WORD,
                                  PAD_WORD, BOS_WORD, EOS_WORD)
 
+
 class TextDataset(ONMTDatasetBase):
     """ Dataset for data_type=='text'
 
@@ -167,7 +168,6 @@ class TextDataset(ONMTDatasetBase):
 
         Yields:
             (word, features, nfeat) triples for each line.
-
         """
         with codecs.open(path, "r", "utf-8") as corpus_file:
             for i, line in enumerate(corpus_file):
