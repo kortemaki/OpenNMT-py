@@ -111,7 +111,10 @@ def report_func(epoch, batch, num_batches,
             # Log the progress using the number of batches on the x-axis.
             report_stats.log_tensorboard(
                 "progress", writer, lr, progress_step)
-        report_stats = onmt.Statistics()
+        if opt.birecall:
+            report_stats = onmt.SummarizationStatistics()
+        else:
+            report_stats = onmt.Statistics()
 
     return report_stats
 
@@ -170,6 +173,7 @@ class DatasetLazyIter(object):
 
         # Sort batch by decreasing lengths of sentence required by pytorch.
         # sort=False means "Use dataset's sortkey instead of iterator's".
+
         return onmt.io.OrderedIterator(
             dataset=self.cur_dataset, batch_size=self.batch_size,
             batch_size_fn=self.batch_size_fn,
@@ -217,6 +221,10 @@ def make_loss_compute(model, tgt_vocab, opt, train=True):
         compute = onmt.modules.CopyGeneratorLossCompute(
             model.generator, tgt_vocab, opt.copy_attn_force,
             opt.copy_loss_by_seqlength)
+    elif opt.birecall:
+        compute = onmt.Loss.SummarizationLossCompute(
+            model.generator, tgt_vocab,
+            label_smoothing=opt.label_smoothing if train else 0.0)
     else:
         compute = onmt.Loss.NMTLossCompute(
             model.generator, tgt_vocab,
@@ -240,7 +248,9 @@ def train_model(model, fields, optim, data_type, model_opt):
 
     trainer = onmt.Trainer(model, train_loss, valid_loss, optim,
                            trunc_size, shard_size, data_type,
-                           norm_method, grad_accum_count)
+                           norm_method, grad_accum_count,
+                           statConstructor=(onmt.SummarizationStatistics
+                                            if opt.birecall else onmt.Statistics))
     print('\nStart training...')
     print(' * number of epochs: %d, starting from Epoch %d' %
           (opt.epochs + 1 - opt.start_epoch, opt.start_epoch))
@@ -254,7 +264,9 @@ def train_model(model, fields, optim, data_type, model_opt):
         train_stats = trainer.train(train_iter, epoch, report_func)
         print('Train perplexity: %g' % train_stats.ppl())
         print('Train accuracy: %g' % train_stats.accuracy())
-
+        if opt.birecall:
+            print('Train bigram recall: %g' % train_stats.recall())
+        
         # 2. Validate on the validation set.
         valid_iter = make_dataset_iter(lazily_load_dataset("valid"),
                                        fields, opt,
@@ -262,6 +274,8 @@ def train_model(model, fields, optim, data_type, model_opt):
         valid_stats = trainer.validate(valid_iter)
         print('Validation perplexity: %g' % valid_stats.ppl())
         print('Validation accuracy: %g' % valid_stats.accuracy())
+        if opt.birecall:
+            print('Validation bigram recall: %g' % valid_stats.recall())
 
         # 3. Log to remote server.
         if opt.exp_host:

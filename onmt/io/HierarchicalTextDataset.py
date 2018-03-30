@@ -13,6 +13,10 @@ from onmt.Utils import aeq
 from onmt.io.DatasetBase import (ONMTDatasetBase, UNK_WORD,
                                  PAD_WORD, BOS_WORD, EOS_WORD)
 
+TRUNC_OUTER = True
+TRUNC_OUTER_START = -5
+TRUNC_OUTER_END = False
+
 class HierarchicalTextDataset(ONMTDatasetBase):
     """ Dataset for data_type=='hierarchicalText'
 
@@ -210,6 +214,10 @@ class HierarchicalTextDataset(ONMTDatasetBase):
                             prefix = side + "_feat_"
                             example_dict.update((prefix + str(k), f)
                                                 for k, f in enumerate(feats))
+                    if TRUNC_OUTER_START:
+                        example_dict[side] = example_dict[side][TRUNC_OUTER_START:]
+                    if TRUNC_OUTER_END:
+                        example_dict[side] = example_dict[side][:TRUNC_OUTER_END]
             yield example_dict, n_feats
 
 
@@ -234,8 +242,7 @@ class HierarchicalTextDataset(ONMTDatasetBase):
         src_inner = torchtext.data.Field(init_token=BOS_WORD, eos_token=EOS_WORD,
                                          pad_token=PAD_WORD, include_lengths=True)
 
-        #TODO: fix_length should not be hardcoded here
-        fields["src"] = torchtext.data.NestedField(src_inner, fix_length=50, include_lengths=True)
+        fields["src"] = torchtext.data.NestedField(src_inner, include_lengths=True)
 
         #TODO: I don't think these will work
         for j in range(n_src_features):
@@ -310,11 +317,11 @@ class HierarchicalTextDataset(ONMTDatasetBase):
     def _dynamic_dict(self, examples_iter):
         for example in examples_iter:
             src = example["src"]
-            src_vocab = torchtext.vocab.Vocab(Counter(src),
+            src_vocab = torchtext.vocab.Vocab(Counter([w for seq in src for w in seq]),
                                               specials=[UNK_WORD, PAD_WORD])
             self.src_vocabs.append(src_vocab)
             # Mapping source tokens to indices in the dynamic dict.
-            src_map = torch.LongTensor([src_vocab.stoi[w] for w in src])
+            src_map = torch.LongTensor([[src_vocab.stoi[w] for w in seq] for seq in src])
             example["src_map"] = src_map
 
             if "tgt" in example:
@@ -346,6 +353,7 @@ class ShardedHierarchicalTextCorpusIterator(object):
             assoc_iter: if not None, it is the associate iterator that
                         this iterator should align its step with.
         """
+        print "ShardedHierarchicalTextCorpusIterator {} {}".format(side, line_truncate, corpus_path)
         try:
             # The codecs module seems to have bugs with seek()/tell(),
             # so we use io.open().
@@ -355,8 +363,10 @@ class ShardedHierarchicalTextCorpusIterator(object):
             sys.exit(1)
 
         self.line_truncate = line_truncate
+        self.post_truncate = line_truncate #TODO: really would like to decouple these
         self.side = side
         self.shard_size = shard_size
+        self.cur_pos = 0
         self.assoc_iter = assoc_iter
         self.last_pos = 0
         self.file_index = -1
@@ -403,6 +413,8 @@ class ShardedHierarchicalTextCorpusIterator(object):
                         self.cur_pos = 0
                         self.filelist = chain([path], self.filelist)
                         raise StopIteration
+                #add next file to shard
+                self.cur_pos+=next_size
                 self.file_index += 1
                 iteration_index += 1
                 yield self._example_dict_iter(path, iteration_index)
@@ -449,22 +461,28 @@ class ShardedHierarchicalTextCorpusIterator(object):
                                         for j, f in enumerate(feats))
             else:
                 example_dict = {self.side: [], "indices": index} #TODO: Do we need sentence indicies?
-                for j, line in enumerate(corpus_file):
+                for j, line in ((e for e in enumerate(corpus_file) if e[0]<self.post_truncate)
+                                if self.post_truncate else enumerate(corpus_file)):
+                    
                     line = line.strip().split()
 
-                    if self.line_truncate: #TODO: way to restrict number of lines in post?
+                    if self.line_truncate:
                         line = line[:self.line_truncate]
 
                     words, feats, n_feats = \
                             HierarchicalTextDataset.extract_text_features(line)
             
                     example_dict[self.side].append(words)
-                        
                     #TODO: this is not going to work
                     if feats:
                         prefix = self.side + "_feat_"
                         example_dict.update((prefix + str(k), f)
                                             for k, f in enumerate(feats))
-
+                if TRUNC_OUTER_START:
+                    example_dict[self.side] = \
+                                    example_dict[self.side][TRUNC_OUTER_START:]
+                if TRUNC_OUTER_END:
+                    example_dict[self.side] = \
+                                    example_dict[self.side][:TRUNC_OUTER_END]
         return example_dict
 

@@ -2,7 +2,7 @@ import onmt.io
 import onmt.translate
 import onmt.Models
 import onmt.Loss
-from onmt.Trainer import Trainer, Statistics
+from onmt.Trainer import Trainer, Statistics, SummarizationStatistics
 from onmt.Optim import Optim
 
 # For flake8 compatibility

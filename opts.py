@@ -118,8 +118,10 @@ def model_opts(parser):
                        help='Train a coverage attention layer.')
     group.add_argument('-lambda_coverage', type=float, default=1,
                        help='Lambda value for coverage.')
+    group.add_argument('-birecall', action="store_true",
+                       help="Include bigram recall in statistics")
 
-
+    
 def preprocess_opts(parser):
     # Data options
     group = parser.add_argument_group('Data')
@@ -135,7 +137,11 @@ def preprocess_opts(parser):
                        help="Path to the validation source data")
     group.add_argument('-valid_tgt', required=True,
                        help="Path to the validation target data")
-
+    group.add_argument('-test_src', required=False,
+                       help="Path to the test source data")
+    group.add_argument('-test_tgt', required=False,
+                       help="Path to the test target data")    
+    
     group.add_argument('-src_dir', default="",
                        help="Source directory for image or audio files.")
 

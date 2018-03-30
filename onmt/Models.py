@@ -226,11 +226,9 @@ class HierarchicalEncoder(EncoderBase):
                 * final encoder state, used to initialize decoder
                 * memory bank for attention, `[src_len x batch x hidden]`
         """        
-        
         src_len_sup = lengths[0] if lengths is not None else src.size()[0]
         enc_s = None
         for i in xrange(max(src_len_sup)):
-            #TODO: debug
             if lengths is not None:
                 l = lengths[1+i]
                 #due to a cudnn restriction, we need to sort the lengths:
@@ -674,7 +672,7 @@ class NMTModel(nn.Module):
         enc_final, memory_bank = self.encoder(src, lengths)
         enc_state = \
             self.decoder.init_decoder_state(src, memory_bank, enc_final)
-
+                
         #TODO: can the decoder know that it only needs the first batch of lengths?
         decoder_outputs, dec_state, attns = \
             self.decoder(tgt, memory_bank,

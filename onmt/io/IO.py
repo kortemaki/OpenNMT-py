@@ -13,6 +13,7 @@ from onmt.io.TextDataset import TextDataset
 from onmt.io.ImageDataset import ImageDataset
 from onmt.io.AudioDataset import AudioDataset
 
+import pdb
 
 def _getstate(self):
     return dict(self.__dict__, stoi=dict(self.stoi))
@@ -288,7 +289,7 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
                            max_size=src_vocab_size,
                            min_freq=src_words_min_frequency)
         print(" * src vocab size: %d." % len(fields["src"].vocab))
-
+        
         # All datasets have same num of n_src_features,
         # getting the last one is OK.
         for j in range(dataset.n_src_feats):

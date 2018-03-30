@@ -11,7 +11,9 @@ from torch.autograd import Variable
 
 import onmt
 import onmt.io
+from onmt.Utils import aeq
 
+import pdb
 
 class LossComputeBase(nn.Module):
     """
@@ -141,6 +143,7 @@ class LossComputeBase(nn.Module):
         num_correct = pred.eq(target) \
                           .masked_select(non_padding) \
                           .sum()
+
         return onmt.Statistics(loss[0], non_padding.sum(), num_correct)
 
     def _bottle(self, v):
@@ -208,6 +211,87 @@ class NMTLossCompute(LossComputeBase):
 
         return loss, stats
 
+class SummarizationLossCompute(NMTLossCompute):
+    def _compute_loss(self, batch, output, target):
+        self.n_batch = target.shape[-1]
+        return super(SummarizationLossCompute, self)._compute_loss(batch, output, target)
+    
+    def _stats(self, loss, scores, target):
+        pred = scores.max(1)[1]
+        non_padding = target.ne(self.padding_idx)
+        num_correct = pred.eq(target) \
+                          .masked_select(non_padding) \
+                          .sum()
+
+        try:
+            target = self._unbottle(target.unsqueeze(1),self.n_batch).squeeze(-1)
+            target_non_padding = target.ne(self.padding_idx)
+            pred = self._unbottle(pred.unsqueeze(1),self.n_batch).squeeze(-1)
+            pred_non_padding = pred.ne(self.padding_idx)
+            recall_set = [set([(int(x),int(y)) for (x,y) in
+                               zip(target[:-1,i][target_non_padding[:-1,i]],
+                                   target[1:,i][target_non_padding[1:,i]])])
+                          for i in xrange(self.n_batch)]
+            bigrams_set = [set([(int(x),int(y)) for (x,y) in
+                                zip(pred[:-1,i][pred_non_padding[:-1,i]],
+                                    pred[1:,i][pred_non_padding[1:,i]])])
+                           for i in xrange(self.n_batch)]
+            n_recall = sum([float(len(b&r))
+                            for (b,r) in zip(bigrams_set,recall_set)])
+            n_bigrams = sum([float(len(r)) for r in recall_set])
+        except:
+            try:
+                # all instances left have length 1
+                aeq(len(target.squeeze().shape),1)
+            except:
+                pdb.set_trace()
+            n_recall = 0
+            n_bigrams = 0
+            
+        return onmt.SummarizationStatistics(loss[0], non_padding.sum(), num_correct, n_recall, n_bigrams)
+
+    def sharded_compute_loss(self, batch, output, attns,
+                             cur_trunc, trunc_size, shard_size,
+                             normalization):
+        """Compute the forward loss and backpropagate.  Computation is done
+        with shards and optionally truncation for memory efficiency.
+
+        Also supports truncated BPTT for long sequences by taking a
+        range in the decoder output sequence to back propagate in.
+        Range is from `(cur_trunc, cur_trunc + trunc_size)`.
+
+        Note sharding is an exact efficiency trick to relieve memory
+        required for the generation buffers. Truncation is an
+        approximate efficiency trick to relieve the memory required
+        in the RNN buffers.
+
+        Args:
+          batch (batch) : batch of labeled examples
+          output (:obj:`FloatTensor`) :
+              output of decoder model `[tgt_len x batch x hidden]`
+          attns (dict) : dictionary of attention distributions
+              `[tgt_len x batch x src_len]`
+          cur_trunc (int) : starting position of truncation window
+          trunc_size (int) : length of truncation window
+          shard_size (int) : maximum number of examples in a shard
+          normalization (int) : Loss is divided by this number
+
+        Returns:
+            :obj:`onmt.Statistics`: validation loss statistics
+
+        """
+        batch_stats = onmt.SummarizationStatistics()
+        range_ = (cur_trunc, cur_trunc + trunc_size)
+        shard_state = self._make_shard_state(batch, output, range_, attns)
+
+        for shard in shards(shard_state, shard_size):
+            loss, stats = self._compute_loss(batch, **shard)
+            loss.div(normalization).backward()
+            batch_stats.update(stats)
+
+        return batch_stats
+
+    
 
 def filter_shard_state(state, requires_grad=True, volatile=False):
     for k, v in state.items():

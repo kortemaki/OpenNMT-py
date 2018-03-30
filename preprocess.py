@@ -16,7 +16,7 @@ def check_existing_pt_files(opt):
     # We will use glob.glob() to find sharded {train|valid}.[0-9]*.pt
     # when training, so check to avoid tampering with existing pt files
     # or mixing them up.
-    for t in ['train', 'valid', 'vocab']:
+    for t in ['train', 'valid', 'test', 'vocab']:
         pattern = opt.save_data + '.' + t + '*.pt'
         if glob.glob(pattern):
             sys.stderr.write("Please backup exisiting pt file: %s, "
@@ -34,7 +34,7 @@ def parse_args():
 
     opt = parser.parse_args()
     torch.manual_seed(opt.seed)
-
+    
     check_existing_pt_files(opt)
 
     return opt
@@ -112,15 +112,19 @@ def build_save_text_dataset_in_shards(src_corpus, tgt_corpus, fields,
 
 
 def build_save_dataset(corpus_type, fields, opt):
-    assert corpus_type in ['train', 'valid']
+    assert corpus_type in ['train', 'valid', 'test']
 
     if corpus_type == 'train':
         src_corpus = opt.train_src
         tgt_corpus = opt.train_tgt
-    else:
+    elif corpus_type == 'valid':
         src_corpus = opt.valid_src
         tgt_corpus = opt.valid_tgt
+    else:
+        src_corpus = opt.test_src
+        tgt_corpus = opt.test_tgt
 
+        
     # Currently we only do preprocess sharding for corpus: data_type=='text'.
     if opt.data_type == 'text':
         return build_save_text_dataset_in_shards(
@@ -170,12 +174,11 @@ def build_save_vocab(train_dataset, fields, opt):
 
     # Can't save fields, so remove/reconstruct at training time.
     vocab_file = opt.save_data + '.vocab.pt'
-    torch.save(onmt.io.save_fields_to_vocab(fields), vocab_file)
-
+    torch.save(onmt.io.save_fields_to_vocab(fields), vocab_file)    
 
 def main():
     opt = parse_args()
-
+    
     print("Extracting features...")
     src_nfeats = onmt.io.get_num_features(opt.data_type, opt.train_src, 'src')
     tgt_nfeats = onmt.io.get_num_features(opt.data_type, opt.train_tgt, 'tgt')
@@ -194,6 +197,9 @@ def main():
     print("Building & saving validation data...")
     build_save_dataset('valid', fields, opt)
 
-
+    if opt.test_src:
+        print("Building & saving test data...")
+        build_save_dataset('test', fields, opt)
+        
 if __name__ == "__main__":
     main()
