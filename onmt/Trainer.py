@@ -19,6 +19,7 @@ import onmt
 import onmt.io
 import onmt.modules
 
+import pdb
 
 class Statistics(object):
     """
@@ -90,6 +91,51 @@ class Statistics(object):
         writer.add_scalar(prefix + "/lr", lr, step)
 
 
+class SummarizationStatistics(Statistics):
+    def __init__(self, loss=0, n_words=0, n_correct=0, n_recall=0, n_bigrams=0):
+        self.n_recall=n_recall
+        self.n_bigrams=n_bigrams
+        super(SummarizationStatistics, self).__init__(loss,n_words,n_correct)
+    
+    def update(self, stat):
+        self.n_recall+=stat.n_recall
+        self.n_bigrams+=stat.n_bigrams
+        super(SummarizationStatistics, self).update(stat)
+
+    def recall(self):
+        return self.n_recall/self.n_bigrams if self.n_bigrams else 1.0
+
+    def output(self, epoch, batch, n_batches, start):
+        """Write out statistics to stdout.
+
+        Args:
+           epoch (int): current epoch
+           batch (int): current batch
+           n_batch (int): total batches
+           start (int): start time of epoch.
+        """
+        t = self.elapsed_time()
+        print(("Epoch %2d, %5d/%5d; acc: %6.2f; ppl: %6.2f; xent: %6.2f; birecall: %1.3f" +
+               "%3.0f src tok/s; %3.0f tgt tok/s; %6.0f s elapsed") %
+              (epoch, batch,  n_batches,
+               self.accuracy(),
+               self.ppl(),
+               self.xent(),
+               self.recall(),
+               self.n_src_words / (t + 1e-5),
+               self.n_words / (t + 1e-5),
+               time.time() - start))
+        sys.stdout.flush()
+
+    def log(self, prefix, experiment, lr):
+        super(SummarizationStatistics,self).log(prefix,experiment,lr)
+        experiment.add_scalar_value(prefix + "_birecall", self.recall())
+
+    def log_tensorboard(self, prefix, writer, lr, step):
+        super(SummarizationStatistics,self).log_tensorboard(prefix,writer,lr,step)
+        writer.add_scalar(prefix + "/birecall", self.recall(), step)
+    
+    
 class Trainer(object):
     """
     Class that controls the training process.
@@ -112,7 +158,8 @@ class Trainer(object):
 
     def __init__(self, model, train_loss, valid_loss, optim,
                  trunc_size=0, shard_size=32, data_type='text',
-                 norm_method="sents", grad_accum_count=1):
+                 norm_method="sents", grad_accum_count=1,
+                 statConstructor=Statistics):
         # Basic attributes.
         self.model = model
         self.train_loss = train_loss
@@ -124,7 +171,8 @@ class Trainer(object):
         self.norm_method = norm_method
         self.grad_accum_count = grad_accum_count
         self.progress_step = 0
-
+        self.statConstructor = statConstructor
+        
         assert(grad_accum_count > 0)
         if grad_accum_count > 1:
             assert(self.trunc_size == 0), \
@@ -144,8 +192,9 @@ class Trainer(object):
         Returns:
             stats (:obj:`onmt.Statistics`): epoch loss statistics
         """
-        total_stats = Statistics()
-        report_stats = Statistics()
+        
+        total_stats = self.statConstructor()
+        report_stats = self.statConstructor()
         idx = 0
         true_batchs = []
         accum = 0
@@ -207,7 +256,7 @@ class Trainer(object):
         # Set model in validating mode.
         self.model.eval()
 
-        stats = Statistics()
+        stats = self.statConstructor()
 
         for batch in valid_iter:
             cur_dataset = valid_iter.get_cur_dataset()
@@ -227,7 +276,7 @@ class Trainer(object):
             # Compute loss.
             batch_stats = self.valid_loss.monolithic_compute_loss(
                     batch, outputs, attns)
-
+            
             # Update statistics.
             stats.update(batch_stats)
 
@@ -309,7 +358,7 @@ class Trainer(object):
                 batch_stats = self.train_loss.sharded_compute_loss(
                         batch, outputs, attns, j,
                         trunc_size, self.shard_size, normalization)
-
+                
                 # 4. Update the parameters and statistics.
                 if self.grad_accum_count == 1:
                     self.optim.step()
